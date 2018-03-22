@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
-#include "connection.h"
+#include "monitor.h"
 
 #define FALHA 1
 #define NSEC_PER_SEC (1000000000) /* The number of nsecs per sec. */
@@ -11,21 +11,37 @@
 const int S = 4184, P = 1000, B = 4;
 const float R= 0.001;
 
-struct boiler_info info;
-
 pthread_t tempController, boilerInfoReader;
 
 pthread_t fileWriter;
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+//pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void alarmClock(int milisecInterval, struct timespec *t)
+{
+    t->tv_nsec += milisecInterval * 1000000;
+
+    while (t->tv_nsec >= NSEC_PER_SEC) {
+        t->tv_nsec -= NSEC_PER_SEC;
+        t->tv_sec++;
+    }
+
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, t, NULL);
+}
 
 void updateBoilerInfo(void) {
-    while (1) {
-        //bedTime(100);
+    int infoReaderPeriod = 100;
+    struct timespec infoReaderClock;
+    clock_gettime(CLOCK_MONOTONIC ,&infoReaderClock);
 
-        pthread_mutex_lock(&mutex);
-            getBoilerInfo(&info);
-        pthread_mutex_unlock(&mutex);
+    while (1) {
+        struct boiler_info info;
+        getBoilerInfo(&info);
+        writeBoilerInfo(&info);
+        alarmClock(infoReaderPeriod, &infoReaderClock);
+
+        // pthread_mutex_lock(&mutex);
+        // pthread_mutex_unlock(&mutex);
 
 
         //printf("Air Temperature: %f \n", info.airTemp);
@@ -34,28 +50,27 @@ void updateBoilerInfo(void) {
         //printf("Outcoming Water Flow: %f \n", info.waterOutFlow);
         //printf("Water Level: %f \n", info.waterLevel);
 
-        sleep(5);
     }
 }
 
 void updateFile(void) {
-    FILE *file;
+    // FILE *file;
 
-    if (file == NULL) {
-        file = fopen("/home/thiago/Documents/studies/Pos-automacao/Tecnicas_I_S_Automatizados/Trabalho I/trabalho_tisa/out.txt", "w");
-    }
+    // if (file == NULL) {
+    //     file = fopen("/home/thiago/Documents/studies/Pos-automacao/Tecnicas_I_S_Automatizados/Trabalho I/trabalho_tisa/out.txt", "w");
+    // }
 
-    for (int i=0; i<5; i++) {
+    // for (int i=0; i<5; i++) {
 
-        const double text = info.waterLevel;
-        fprintf(file, "Some text: %f\n", text);
+    //     const double text = info.waterLevel;
+    //     fprintf(file, "Some text: %f\n", text);
 
-        sleep(5);
-    }
+    //     sleep(5);
+    // }
 
-    printf("ACABOUUUUU \\O/");
+    // printf("ACABOUUUUU \\O/");
 
-    fclose(file);
+    // fclose(file);
 }
 
 // void * controle_p1(void * arg) { 
@@ -76,18 +91,6 @@ void updateFile(void) {
 //    }
 // }
 
-void bedTime(int milisecInterval, struct timespec *t)
-{
-    int nanoSecInterval = (milisecInterval * 1000000) % 1000000000;
-    t->tv_nsec += nanoSecInterval;
-    t->tv_sec = milisecInterval / 1000;
-
-    //struct timespec res;
-    //res.tv_sec = milisec/1000;
-    //res.tv_nsec = (milisec*1000000) % 1000000000;
-    clock_nanosleep(CLOCK_MONOTONIC, 0, t, NULL);
-}
-
 void * temperatureControl(void * arg) {
     double P, integ = 0, Ni = 1, H, erro, Tref = 30;
     double Qi, Q, Qe, Qt; 
@@ -95,26 +98,36 @@ void * temperatureControl(void * arg) {
     const double Kp = 10000;
     double Ta, T, Ti;
 
-    int controllerPeriod = 200;
+    int controllerPeriod = 1000;
     struct timespec temperatureControllerClock;
+    clock_gettime(CLOCK_MONOTONIC ,&temperatureControllerClock);
 
     while(1){
-        bedTime(controllerPeriod, &temperatureControllerClock);
+        //pthread_mutex_lock(&mutex);
+        struct boiler_info info;
+        readBoilerInfo(&info);
 
-        pthread_mutex_lock(&mutex);
-            H = info.waterLevel;
-            Ta = info.airTemp;
-            T = info.waterTemp;
-            Ti = info.waterInTemp;
+        H = info.waterLevel;
+        Ta = info.airTemp;
+        T = info.waterTemp;
+        Ti = info.waterInTemp;
 
-            erro = Tref - T;
-            P = Kp * erro; 
-            integ = integ + (erro * Ki);
-            Qt = P + integ;
-            Qi = Ni * S * (Ti - T);
-            Qe = (T - Ta) / R;
-            Q = Qt + Qe - Qi;
-        pthread_mutex_unlock(&mutex);
+        printf("water Level: %f\n", H);
+        printf("air Temp: %f\n", Ta);
+        printf("water Temp: %f\n", T);
+        printf("water In Temp: %f\n", Ti);
+
+        erro = Tref - T;
+        P = Kp * erro; 
+        integ = integ + (erro * Ki);
+        Qt = P + integ;
+        Qi = Ni * S * (Ti - T);
+        Qe = (T - Ta) / R;
+        Q = Qt + Qe - Qi;
+
+        alarmClock(controllerPeriod, &temperatureControllerClock);
+            //setBoilerControl();
+        //pthread_mutex_unlock(&mutex);
     }
 }
 
@@ -126,6 +139,8 @@ int main(int argc, char *argv[])
 
     //char *msg = setBoilerControl(WATER_IN_FLOW, 10.0);
     //printf("Control Response: %s \n", msg);
+
+    //printf("Entrei no temperature control");
 
     pthread_create(&boilerInfoReader, NULL, (void *) updateBoilerInfo, NULL);
     pthread_create(&tempController, NULL, (void *) temperatureControl, NULL);

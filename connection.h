@@ -1,11 +1,3 @@
-extern char* AIR_TEMPERATURE;
-extern char* WATER_TEMPERATURE;
-extern char* WATER_IN_TEMPERATURE;
-extern char* WATER_OUT_FLOW;
-extern char* WATER_LEVEL;
-extern char* WATER_IN_FLOW;
-extern char* HEAT_FLOW;
-
 struct boiler_info
 {
     double airTemp;
@@ -14,6 +6,14 @@ struct boiler_info
     double waterOutFlow;
     double waterLevel;  
 };
+
+extern char* AIR_TEMPERATURE;
+extern char* WATER_TEMPERATURE;
+extern char* WATER_IN_TEMPERATURE;
+extern char* WATER_OUT_FLOW;
+extern char* WATER_LEVEL;
+extern char* WATER_IN_FLOW;
+extern char* HEAT_FLOW;
 
 void openConnection(char *host, int port);
 
