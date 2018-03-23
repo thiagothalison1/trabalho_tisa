@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
+#include "bufferControl.h"
 #include "monitor.h"
 
 #define FALHA 1
@@ -12,14 +13,11 @@ const int S = 4184, PAGUA = 1000, B = 4;
 const float R= 0.001;
 float Ni = 0;
 
-pthread_t tempController, boilerInfoReader, levelController, temperatureAlarm, userInterface;
+pthread_t tempController, boilerInfoReader, levelController, temperatureAlarm, userInterface, logGenerator;
 
 pthread_t fileWriter;
 
-int simulatorStarted = -1;
-
-void alarmClock(int milisecInterval, struct timespec *t)
-{
+void alarmClock(int milisecInterval, struct timespec *t) {
     t->tv_nsec += milisecInterval * 1000000;
 
     while (t->tv_nsec >= NSEC_PER_SEC) {
@@ -31,15 +29,16 @@ void alarmClock(int milisecInterval, struct timespec *t)
 }
 
 void updateBoilerInfo(void) {
+    struct boiler_info info;
     int infoReaderPeriod = 115;
     struct timespec infoReaderClock;
     clock_gettime(CLOCK_MONOTONIC ,&infoReaderClock);
 
+
     while (1) {
-        struct boiler_info info;
         getBoilerInfo(&info);
         writeBoilerInfo(&info);
-        simulatorStarted = 1;
+        insertValue(info.waterLevel, info.waterTemp);
         alarmClock(infoReaderPeriod, &infoReaderClock);
     }
 }
@@ -65,6 +64,7 @@ void updateFile(void) {
 }
 
 void * levelControl(void * arg) { 
+    struct boiler_info info;
     double prop, I=0, No, N, erro, H, IOld;
     double long Ki = 1159;
     double long Kp = 5883;
@@ -75,7 +75,6 @@ void * levelControl(void * arg) {
     clock_gettime(CLOCK_MONOTONIC ,&levelControllerClock);
 
    while(1){
-    struct boiler_info info;
     readBoilerInfo(&info);
 
     H = info.waterLevel;
@@ -88,14 +87,13 @@ void * levelControl(void * arg) {
     double NiTemp = N + No;
     Ni = (NiTemp > 100) ? 100 : (NiTemp < 0) ? 0 : NiTemp;
 
-    //printf("Ni: %f  \n", Ni);
-
     setBoilerControl(WATER_IN_FLOW, Ni);
     alarmClock(controllerPeriod, &levelControllerClock);
    }
 }
 
 void * temperatureControl(void * arg) {
+    struct boiler_info info;
     double prop, I = 0, erro, Tref = 21, IOld;
     double Qi, Q, Qe, Qt; 
     const double Ki = 50000;
@@ -107,7 +105,6 @@ void * temperatureControl(void * arg) {
     clock_gettime(CLOCK_MONOTONIC ,&temperatureControllerClock);
 
     while(1){
-        struct boiler_info info;
         readBoilerInfo(&info);
 
         Ta = info.airTemp;
@@ -123,25 +120,25 @@ void * temperatureControl(void * arg) {
         Q = Qt + Qe - Qi;
         Q = (Q > 1000000) ? 1000000 : (Q < 0) ? 0 : Q;
        
-        //printf("Q: %f\n", Q);
-
         setBoilerControl(HEAT_FLOW, Q);
         alarmClock(controllerPeriod, &temperatureControllerClock);
     }
 }
 
 void * watchTemperature(void) {
+    double temperatureInfo;
     double tempLowerBound = 16;
     double tempUpperBound = 25;
 
-    //int temperatureMonitorPeriod = 100;
-    //struct timespec temperatureMonitorClock;
-    //clock_gettime(CLOCK_MONOTONIC ,&temperatureMonitorClock);
+    int temperatureAlarmPeriod = 1000;
+    struct timespec temperatureAlarmClock;
+    clock_gettime(CLOCK_MONOTONIC ,&temperatureAlarmClock);
 
-    //while(1) {
-        monitorTemperature(tempLowerBound, tempUpperBound);
-        //alarmClock(temperatureMonitorPeriod, &temperatureMonitorClock);
-    //}
+    while(1) {
+        monitorTemperature(tempLowerBound, tempUpperBound, &temperatureInfo);
+        printf("Critical Temperature: %f\n", temperatureInfo);
+        alarmClock(temperatureAlarmPeriod, &temperatureAlarmClock);
+    }
 
 }
 
@@ -149,12 +146,32 @@ void * informUser(void) {
     int period = 1000;
     struct timespec myClock;
     clock_gettime(CLOCK_MONOTONIC ,&myClock);
+    struct boiler_info info;
     
     while (1) {
-        struct boiler_info info;
         readBoilerInfo(&info);
         printf("Water level: %f\nTemperature: %f\n\n", info.waterLevel, info.waterTemp);
         alarmClock(period, &myClock);
+    }
+}
+
+void * logInfo() {
+    FILE *file;
+
+    while (1) {
+        struct buffer_data * fullBuffer = waitFullBuffer();
+
+        file = fopen("./out.txt", "a");
+
+        struct buffer_data * data;
+
+        for (int i = 0; i < 100; i++) {
+            data = &fullBuffer[i];
+            fprintf(file, "Water Temp: %f\n", data->waterTemp);
+            fprintf(file, "Water Level: %f\n", data->waterLevel);
+        }
+
+        fclose(file);
     }
 }
 
@@ -164,27 +181,17 @@ int main(int argc, char *argv[])
 	int port = 5858;
 	openConnection(host, port);
 
-    //char *msg = setBoilerControl(WATER_IN_FLOW, 10.0);
-    //printf("Control Response: %s \n", msg);
-
-    //printf("Entrei no temperature control");
-
-    //struct boiler_info info;
-    //getBoilerInfo(&info);
-    //writeBoilerInfo(&info);
-    //free(info);
-
     pthread_create(&boilerInfoReader, NULL, (void *) updateBoilerInfo, NULL);
     pthread_create(&tempController, NULL, (void *) temperatureControl, NULL);
     pthread_create(&levelController, NULL, (void *) levelControl, NULL);
     pthread_create(&userInterface, NULL, (void *) informUser, NULL);
-    // pthread_create(&temperatureAlarm, NULL, (void *) watchTemperature, NULL);
+    pthread_create(&temperatureAlarm, NULL, (void *) watchTemperature, NULL);
+    pthread_create(&logGenerator, NULL, (void *) logInfo, NULL);
     
-    //pthread_create(&fileWriter, NULL, (void *) updateFile, NULL);
-
     pthread_join(boilerInfoReader, NULL);
     pthread_join(tempController, NULL);
     pthread_join(levelController, NULL);
     pthread_join(userInterface, NULL);
-    // pthread_join(temperatureAlarm, NULL);
+    pthread_join(temperatureAlarm, NULL);
+    pthread_join(logGenerator, NULL);
 }

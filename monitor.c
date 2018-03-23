@@ -7,18 +7,18 @@
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-pthread_cond_t temperatureAlarm;
+pthread_cond_t tempAlarm = PTHREAD_COND_INITIALIZER;
 
 double tempLowerBound, tempUpperBound;
 
 struct boiler_info sharedInfo;
 
-// void evaluateTemperature()
-// {
-//     while (sharedInfo.waterTemp >= tempUpperBound || sharedInfo.waterTemp <= tempLowerBound) {
-//         pthread_cond_signal(&temperatureAlarm);
-//     }
-// }
+void checkTemperatureAlarm()
+{
+    if (sharedInfo.waterTemp <= tempLowerBound || sharedInfo.waterTemp >= tempUpperBound) {
+        pthread_cond_signal(&tempAlarm);
+    }
+}
 
 void writeBoilerInfo(struct boiler_info *newInfoValues)
 {
@@ -28,7 +28,7 @@ void writeBoilerInfo(struct boiler_info *newInfoValues)
         sharedInfo.waterInTemp = newInfoValues->waterInTemp;
         sharedInfo.waterOutFlow = newInfoValues->waterOutFlow;
         sharedInfo.waterLevel = newInfoValues->waterLevel;
-        // evaluateTemperature();
+        checkTemperatureAlarm();
     pthread_mutex_unlock(&mutex);
 }
 
@@ -43,18 +43,15 @@ void readBoilerInfo(struct boiler_info *info)
     pthread_mutex_unlock(&mutex);
 }
 
-void monitorTemperature(double tempLowerBoundV, double tempUpperBoundV) {
-    printf("oi");
-    // //tempLowerBound = tempLowerBoundV;
-    // //tempUpperBound = tempUpperBoundV;
+void monitorTemperature(double tempLowerBoundV, double tempUpperBoundV, double *temperatureInfo) {
+    tempLowerBound = tempLowerBoundV;
+    tempUpperBound = tempUpperBoundV;
 
-    // pthread_mutex_lock(&mutex);
-    //     //if (hasUpdates == -1 || sharedInfo.waterTemp > tempLowerBound && sharedInfo.waterTemp < tempUpperBound) {
-    //     while (alarme == -1) {
-    //         printf("entrei no wait\n");
-    //         pthread_cond_wait(&temperatureAlarm, &mutex);
-    //     }
-    //     //}
-    // pthread_mutex_unlock(&mutex);
-    // printf("Water temp: %f\n", sharedInfo.waterTemp);
+    pthread_mutex_lock(&mutex);
+        while (sharedInfo.waterTemp > tempLowerBound && sharedInfo.waterTemp < tempUpperBound) {
+            pthread_cond_wait(&tempAlarm, &mutex);
+        }
+        double currentTemperature = sharedInfo.waterTemp;
+        temperatureInfo = &currentTemperature;
+    pthread_mutex_unlock(&mutex);
 }
