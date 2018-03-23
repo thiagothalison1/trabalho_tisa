@@ -4,7 +4,8 @@ struct boiler_info
     double waterTemp;
     double waterInTemp;
     double waterOutFlow;
-    double waterLevel;  
+    double waterLevel;
+    double waterInFlow;
 };
 
 extern char* AIR_TEMPERATURE;
