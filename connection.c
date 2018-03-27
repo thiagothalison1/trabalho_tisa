@@ -113,15 +113,18 @@ void openConnection(char *host, int port) {
 	endereco_destino = cria_endereco_destino(host, port);
 }
 
-char* sendMessage(char *message)
+void sendMessage(char *message, char *buffer)
 {
 	char msg_enviada[1000];
-	char *msg_recebida = malloc (sizeof (char) * TAM_MEU_BUFFER);
+	//char *msg_recebida = malloc (sizeof (char) * TAM_MEU_BUFFER);
+	//int tamVector;
 
 	sprintf(msg_enviada, "%s", message);
 	envia(msg_enviada);
-	int nrec = recebe(msg_recebida);
-	return msg_recebida;
+	int nrec = recebe(buffer);
+	//tamVector = strlen(msg_recebida);
+	buffer[TAM_MEU_BUFFER-1] = '\0';
+	//return msg_recebida;
 }
 
 void cut (char *src,  char *dest, int begin) {
@@ -136,43 +139,46 @@ void cut (char *src,  char *dest, int begin) {
 
 void getBoilerInfo(struct boiler_info *info)
 {
-	char *airTemp = sendMessage(AIR_TEMPERATURE);
-	char *airTempValue = (char*) malloc(6);
-	strncpy(airTempValue, airTemp + 3, strlen(airTemp));
-	double airTempValueDouble = atof(airTempValue);
+	char msg_recebida[TAM_MEU_BUFFER];
+
+	sendMessage(AIR_TEMPERATURE, msg_recebida);
+	//char *airTempValue = (char*) malloc(6);
+	//strncpy(airTempValue, airTemp + 3, strlen(airTemp));
+	double airTempValueDouble = atof(&msg_recebida[3]);
 	info->airTemp = airTempValueDouble;
 
-	char *waterTemp = sendMessage(WATER_TEMPERATURE);
-	char *waterTempValue = (char*) malloc(6); 
-	strncpy(waterTempValue, waterTemp + 3, strlen(waterTemp));
-	double waterTempValueDouble = atof(waterTempValue);
+	sendMessage(WATER_TEMPERATURE, msg_recebida);
+	//char *waterTempValue = (char*) malloc(6); 
+	//strncpy(waterTempValue, waterTemp + 3, strlen(waterTemp));
+	double waterTempValueDouble = atof(&msg_recebida[3]);
 	info->waterTemp = waterTempValueDouble;
 
-	char *waterInTemp = sendMessage(WATER_IN_TEMPERATURE);
-	char *waterInTempValue = (char*) malloc(6);
-	strncpy(waterInTempValue, waterInTemp + 3, strlen(waterInTemp));
-	double waterInTempValueDouble = atof(waterInTempValue);
+	sendMessage(WATER_IN_TEMPERATURE, msg_recebida);
+	//char *waterInTempValue = (char*) malloc(6);
+	//strncpy(waterInTempValue, waterInTemp + 3, strlen(waterInTemp));
+	double waterInTempValueDouble = atof(&msg_recebida[3]);
     info->waterInTemp = waterInTempValueDouble;
 
-	char *waterOutFlow = sendMessage(WATER_OUT_FLOW);
-	char *waterOutFlowValue = (char*) malloc(6);
-	strncpy(waterOutFlowValue, waterOutFlow + 3, strlen(waterOutFlow));
-	double waterOutFlowValueDouble = atof(waterOutFlowValue);
+	sendMessage(WATER_OUT_FLOW, msg_recebida);
+	//char *waterOutFlowValue = (char*) malloc(6);
+	//strncpy(waterOutFlowValue, waterOutFlow + 3, strlen(waterOutFlow));
+	double waterOutFlowValueDouble = atof(&msg_recebida[3]);
     info->waterOutFlow = waterOutFlowValueDouble;
 
-	char *waterLevel = sendMessage(WATER_LEVEL);
-	char *waterLevelValue = (char*) malloc(6);
-	strncpy(waterLevelValue, waterLevel + 3, strlen(waterLevel));
-	double waterLevelValueDouble = atof(waterLevelValue);
+	sendMessage(WATER_LEVEL, msg_recebida);
+	//char *waterLevelValue = (char*) malloc(6);
+	//strncpy(waterLevelValue, waterLevel + 3, strlen(waterLevel));
+	double waterLevelValueDouble = atof(&msg_recebida[3]);
     info->waterLevel = waterLevelValueDouble;
 }
 
-char* setBoilerControl(char *controlType, double value)
+void setBoilerControl(char *controlType, double value)
 {
+	char msg_recebida[TAM_MEU_BUFFER];
 	char message[500];
 	sprintf(message, "%s%.1lf", controlType, value);
 	//printf("%s", message);
-	return sendMessage(message);
+	sendMessage(message, msg_recebida);
 }
 
 

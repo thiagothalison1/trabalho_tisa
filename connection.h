@@ -18,8 +18,8 @@ extern char* HEAT_FLOW;
 
 void openConnection(char *host, int port);
 
-char* sendMessage(char *message);
+void sendMessage(char *message, char *buffer);
 
 void getBoilerInfo(struct boiler_info *info);
 
-char* setBoilerControl(char *controlType, double value);
+void setBoilerControl(char *controlType, double value);

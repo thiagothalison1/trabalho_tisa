@@ -32,7 +32,7 @@ void alarmClock(int milisecInterval, struct timespec *t) {
 }
 
 void updateBoilerInfo(void) {
-    int infoReaderPeriod = 130;
+    int infoReaderPeriod = 500;
     struct timespec infoReaderClock;
     clock_gettime(CLOCK_MONOTONIC ,&infoReaderClock);
 
