@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <pthread.h>
 #include "connection.h"
 
 #define	TAM_MEU_BUFFER	1000
@@ -36,6 +37,7 @@ char* HEAT_FLOW = "aq-";
  */
 int socket_local;
 struct sockaddr_in endereco_destino;
+pthread_mutex_t socket_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int str_cut(char *str, int begin, int len)
 {
@@ -50,14 +52,12 @@ int str_cut(char *str, int begin, int len)
 
 int cria_socket_local(void)
 {
-	int socket_local;		/* Socket usado na comunicacão */
-
 	socket_local = socket( PF_INET, SOCK_DGRAM, 0);
 	if (socket_local < 0) {
 		perror("socket");
 		return 1;
 	}
-	return socket_local;
+	return 0;
 }
 
 struct sockaddr_in cria_endereco_destino(char *destino, int porta_destino)
@@ -109,22 +109,18 @@ int recebe(char *buffer)
 }
 
 void openConnection(char *host, int port) {
-	socket_local = cria_socket_local();
+	cria_socket_local();
 	endereco_destino = cria_endereco_destino(host, port);
 }
 
 void sendMessage(char *message, char *buffer)
 {
 	char msg_enviada[1000];
-	//char *msg_recebida = malloc (sizeof (char) * TAM_MEU_BUFFER);
-	//int tamVector;
 
 	sprintf(msg_enviada, "%s", message);
 	envia(msg_enviada);
 	int nrec = recebe(buffer);
-	//tamVector = strlen(msg_recebida);
 	buffer[TAM_MEU_BUFFER-1] = '\0';
-	//return msg_recebida;
 }
 
 void cut (char *src,  char *dest, int begin) {
@@ -139,97 +135,40 @@ void cut (char *src,  char *dest, int begin) {
 
 void getBoilerInfo(struct boiler_info *info)
 {
-	char msg_recebida[TAM_MEU_BUFFER];
+	pthread_mutex_lock(&socket_mutex);
+		char msg_recebida[TAM_MEU_BUFFER];
 
-	sendMessage(AIR_TEMPERATURE, msg_recebida);
-	//char *airTempValue = (char*) malloc(6);
-	//strncpy(airTempValue, airTemp + 3, strlen(airTemp));
-	double airTempValueDouble = atof(&msg_recebida[3]);
-	info->airTemp = airTempValueDouble;
+		sendMessage(AIR_TEMPERATURE, msg_recebida);
+		double airTempValueDouble = atof(&msg_recebida[3]);
+		info->airTemp = airTempValueDouble;
 
-	sendMessage(WATER_TEMPERATURE, msg_recebida);
-	//char *waterTempValue = (char*) malloc(6); 
-	//strncpy(waterTempValue, waterTemp + 3, strlen(waterTemp));
-	double waterTempValueDouble = atof(&msg_recebida[3]);
-	info->waterTemp = waterTempValueDouble;
+		sendMessage(WATER_TEMPERATURE, msg_recebida);
+		double waterTempValueDouble = atof(&msg_recebida[3]);
+		info->waterTemp = waterTempValueDouble;
 
-	sendMessage(WATER_IN_TEMPERATURE, msg_recebida);
-	//char *waterInTempValue = (char*) malloc(6);
-	//strncpy(waterInTempValue, waterInTemp + 3, strlen(waterInTemp));
-	double waterInTempValueDouble = atof(&msg_recebida[3]);
-    info->waterInTemp = waterInTempValueDouble;
+		sendMessage(WATER_IN_TEMPERATURE, msg_recebida);
+		double waterInTempValueDouble = atof(&msg_recebida[3]);
+		info->waterInTemp = waterInTempValueDouble;
 
-	sendMessage(WATER_OUT_FLOW, msg_recebida);
-	//char *waterOutFlowValue = (char*) malloc(6);
-	//strncpy(waterOutFlowValue, waterOutFlow + 3, strlen(waterOutFlow));
-	double waterOutFlowValueDouble = atof(&msg_recebida[3]);
-    info->waterOutFlow = waterOutFlowValueDouble;
+		sendMessage(WATER_OUT_FLOW, msg_recebida);
+		double waterOutFlowValueDouble = atof(&msg_recebida[3]);
+		info->waterOutFlow = waterOutFlowValueDouble;
 
-	sendMessage(WATER_LEVEL, msg_recebida);
-	//char *waterLevelValue = (char*) malloc(6);
-	//strncpy(waterLevelValue, waterLevel + 3, strlen(waterLevel));
-	double waterLevelValueDouble = atof(&msg_recebida[3]);
-    info->waterLevel = waterLevelValueDouble;
+		sendMessage(WATER_LEVEL, msg_recebida);
+		double waterLevelValueDouble = atof(&msg_recebida[3]);
+		info->waterLevel = waterLevelValueDouble;
+	pthread_mutex_unlock(&socket_mutex);
+
+	/* For debugging */
+	//printf("T:%f	H:%f\n", info->waterTemp, info->waterLevel);
 }
 
 void setBoilerControl(char *controlType, double value)
 {
-	char msg_recebida[TAM_MEU_BUFFER];
-	char message[500];
-	sprintf(message, "%s%.1lf", controlType, value);
-	//printf("%s", message);
-	sendMessage(message, msg_recebida);
+	pthread_mutex_lock(&socket_mutex);
+		char msg_recebida[TAM_MEU_BUFFER];
+		char message[500];
+		sprintf(message, "%s%.1lf", controlType, value);
+		sendMessage(message, msg_recebida);
+	pthread_mutex_unlock(&socket_mutex);
 }
-
-
-// int main(int argc, char *argv[])
-// {
-// 	if (argc < 4) { 
-// 		fprintf(stderr,"Uso: udpcliente endereço porta palavra \n");
-// 		fprintf(stderr,"onde o endereço é o endereço do servidor \n");
-// 		fprintf(stderr,"porta é o número da porta do servidor \n");
-// 		fprintf(stderr,"palavra é a palavra que será enviada ao servidor \n");
-// 		fprintf(stderr,"exemplo de uso:\n");
-// 		fprintf(stderr,"   udpcliente baker.das.ufsc.br 1234 \"ola\"\n");
-// 		exit(FALHA);
-// 	}
-
-// 	char *host = argv[1];
-// 	int porta = atoi(argv[2]);
-// 	openConnection(host, porta);
-
-// 	char *mensagem = argv[3];
-// 	char *mensagemRecebida = sendMessage(mensagem);
-
-// 	printf("Resposta: %s \n", mensagemRecebida);
-
-
-// 	// int socket_local = cria_socket_local();
-
-// 	// struct sockaddr_in endereco_destino = cria_endereco_destino(argv[1], porta_destino);
-
-// 	//int i = 0;    
-// 	//char msg_enviada[1000];  
-// 	//char msg_recebida[1000];
-// 	//int nrec;
-
-// 	//do{
-// 		//printf("tentativa %d\n", i);
-// 		//sprintf(msg_enviada, "tentativa %d ", i);
-// 		//sprintf(msg_enviada, "%s", argv[3]);
-// 		//strcat(msg_enviada, argv[3]);
-
-// 		//envia_mensagem(socket_local, endereco_destino, msg_enviada);
-
-// 		//nrec = recebe_mensagem(socket_local, msg_recebida, 1000);
-		
-// 		//double temp = strtod(msg_recebida, NULL);
-		
-// 		//printf("Mensagem de resposta com %d bytes %s \n", nrec, msg_recebida);
-
-// 		//sleep(1);
-// 		//++i;
-
-// 	//} while( i < 5000 );
-
-// }

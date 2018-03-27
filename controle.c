@@ -32,7 +32,7 @@ void alarmClock(int milisecInterval, struct timespec *t) {
 }
 
 void updateBoilerInfo(void) {
-    int infoReaderPeriod = 500;
+    int infoReaderPeriod = 130;
     struct timespec infoReaderClock;
     clock_gettime(CLOCK_MONOTONIC ,&infoReaderClock);
 
@@ -108,8 +108,8 @@ void * temperatureControl(void * arg) {
 
 void * watchTemperature(void) {
     double temperatureInfo;
-    double tempLowerBound = 16;
-    double tempUpperBound = 25;
+    double tempLowerBound = 2;
+    double tempUpperBound = 98;
 
     int temperatureAlarmPeriod = 1000;
     struct timespec temperatureAlarmClock;
@@ -125,8 +125,8 @@ void * watchTemperature(void) {
 
 void * watchLevel(void) {
     double levelInfo;
-    double levelLowerBound = 1.0;
-    double levelUpperBound = 3.0;
+    double levelLowerBound = 0.2;
+    double levelUpperBound = 2.9;
 
     int levelAlarmPeriod = 1000;
     struct timespec levelAlarmClock;
