@@ -12,10 +12,13 @@
 const int S = 4184, PAGUA = 1000, B = 4;
 const float R= 0.001;
 float Ni = 0;
+int stopOutput = 0;
+double Href = 2.1;
+double Tref = 21;
 
-pthread_t tempController, boilerInfoReader, levelController, temperatureAlarm, userInterface, logGenerator;
+pthread_t tempController, boilerInfoReader, levelController, temperatureAlarm, levelAlarm, userInterface, logGenerator;
 
-pthread_t fileWriter;
+pthread_t fileWriter, userEntry;
 
 void alarmClock(int milisecInterval, struct timespec *t) {
     t->tv_nsec += milisecInterval * 1000000;
@@ -29,13 +32,12 @@ void alarmClock(int milisecInterval, struct timespec *t) {
 }
 
 void updateBoilerInfo(void) {
-    struct boiler_info info;
-    int infoReaderPeriod = 115;
+    int infoReaderPeriod = 130;
     struct timespec infoReaderClock;
     clock_gettime(CLOCK_MONOTONIC ,&infoReaderClock);
 
-
     while (1) {
+        struct boiler_info info;
         getBoilerInfo(&info);
         writeBoilerInfo(&info);
         insertValue(info.waterLevel, info.waterTemp);
@@ -43,32 +45,11 @@ void updateBoilerInfo(void) {
     }
 }
 
-void updateFile(void) {
-    // FILE *file;
-
-    // if (file == NULL) {
-    //     file = fopen("/home/thiago/Documents/studies/Pos-automacao/Tecnicas_I_S_Automatizados/Trabalho I/trabalho_tisa/out.txt", "w");
-    // }
-
-    // for (int i=0; i<5; i++) {
-
-    //     const double text = info.waterLevel;
-    //     fprintf(file, "Some text: %f\n", text);
-
-    //     sleep(5);
-    // }
-
-    // printf("ACABOUUUUU \\O/");
-
-    // fclose(file);
-}
-
 void * levelControl(void * arg) { 
     struct boiler_info info;
     double prop, I=0, No, N, erro, H, IOld;
     double long Ki = 1159;
     double long Kp = 5883;
-    double Href = 2.1;
 
     int controllerPeriod = 150;
     struct timespec levelControllerClock;
@@ -94,7 +75,7 @@ void * levelControl(void * arg) {
 
 void * temperatureControl(void * arg) {
     struct boiler_info info;
-    double prop, I = 0, erro, Tref = 21, IOld;
+    double prop, I = 0, erro, IOld;
     double Qi, Q, Qe, Qt; 
     const double Ki = 50000;
     const double Kp = 87500;
@@ -142,6 +123,22 @@ void * watchTemperature(void) {
 
 }
 
+void * watchLevel(void) {
+    double levelInfo;
+    double levelLowerBound = 1.0;
+    double levelUpperBound = 3.0;
+
+    int levelAlarmPeriod = 1000;
+    struct timespec levelAlarmClock;
+    clock_gettime(CLOCK_MONOTONIC ,&levelAlarmClock);
+
+    while(1) {
+        monitorLevel(levelLowerBound, levelUpperBound, &levelInfo);
+        printf("Critical Water Level: %f\n", levelInfo);
+        alarmClock(levelAlarmPeriod, &levelAlarmClock);
+    }
+}
+
 void * informUser(void) {
     int period = 1000;
     struct timespec myClock;
@@ -149,8 +146,10 @@ void * informUser(void) {
     struct boiler_info info;
     
     while (1) {
-        readBoilerInfo(&info);
-        printf("Water level: %f\nTemperature: %f\n\n", info.waterLevel, info.waterTemp);
+        if (stopOutput == 0) {
+            readBoilerInfo(&info);
+            printf("Water level: %f\nTemperature: %f\n\n", info.waterLevel, info.waterTemp);
+        }
         alarmClock(period, &myClock);
     }
 }
@@ -175,6 +174,34 @@ void * logInfo() {
     }
 }
 
+void * handleUserEntry() {
+    while (1) {
+        char a;
+		scanf("%c", &a);
+
+		if (a == 'i') {
+			stopOutput = 1;
+			printf("Please enter 1 for Href and 2 for Tref: \n");
+			int resp;
+			scanf("%d", &resp);
+			if (resp == 1) {
+                printf("Please enter the new Href: \n");
+				double newHRef;
+                scanf("%lf", &newHRef);
+                Href = newHRef;
+			} else if (resp == 2) {
+                printf("Please enter the new Tref: \n");
+                double newTRef;
+                scanf("%lf", &newTRef);
+                Tref = newTRef;
+            }
+			stopOutput = 0;
+		}
+
+        sleep(1);
+    }
+}
+
 int main(int argc, char *argv[])
 {
 	char *host = "localhost";
@@ -186,12 +213,16 @@ int main(int argc, char *argv[])
     pthread_create(&levelController, NULL, (void *) levelControl, NULL);
     pthread_create(&userInterface, NULL, (void *) informUser, NULL);
     pthread_create(&temperatureAlarm, NULL, (void *) watchTemperature, NULL);
+    pthread_create(&levelAlarm, NULL, (void *) watchLevel, NULL);
     pthread_create(&logGenerator, NULL, (void *) logInfo, NULL);
+    pthread_create(&userEntry, NULL, (void *) handleUserEntry, NULL);
     
     pthread_join(boilerInfoReader, NULL);
     pthread_join(tempController, NULL);
     pthread_join(levelController, NULL);
     pthread_join(userInterface, NULL);
     pthread_join(temperatureAlarm, NULL);
+    pthread_join(levelAlarm, NULL);
     pthread_join(logGenerator, NULL);
+    pthread_join(userEntry, NULL);
 }

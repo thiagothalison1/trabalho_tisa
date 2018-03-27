@@ -3,20 +3,30 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
+#include <string.h>
 #include "monitor.h"
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-pthread_cond_t tempAlarm = PTHREAD_COND_INITIALIZER;
+pthread_cond_t waterTempAlarm = PTHREAD_COND_INITIALIZER;
 
-double tempLowerBound, tempUpperBound;
+pthread_cond_t waterLevelAlarm = PTHREAD_COND_INITIALIZER;
+
+double tempLowerBound, tempUpperBound, levelLowerBound, levelUpperBound;
 
 struct boiler_info sharedInfo;
 
 void checkTemperatureAlarm()
 {
     if (sharedInfo.waterTemp <= tempLowerBound || sharedInfo.waterTemp >= tempUpperBound) {
-        pthread_cond_signal(&tempAlarm);
+        pthread_cond_signal(&waterTempAlarm);
+    }
+}
+
+void checkLevelAlarm()
+{
+    if (sharedInfo.waterLevel <= levelLowerBound || sharedInfo.waterLevel >= levelUpperBound) {
+        pthread_cond_signal(&waterLevelAlarm);
     }
 }
 
@@ -28,7 +38,9 @@ void writeBoilerInfo(struct boiler_info *newInfoValues)
         sharedInfo.waterInTemp = newInfoValues->waterInTemp;
         sharedInfo.waterOutFlow = newInfoValues->waterOutFlow;
         sharedInfo.waterLevel = newInfoValues->waterLevel;
+
         checkTemperatureAlarm();
+        checkLevelAlarm();
     pthread_mutex_unlock(&mutex);
 }
 
@@ -49,9 +61,20 @@ void monitorTemperature(double tempLowerBoundV, double tempUpperBoundV, double *
 
     pthread_mutex_lock(&mutex);
         while (sharedInfo.waterTemp > tempLowerBound && sharedInfo.waterTemp < tempUpperBound) {
-            pthread_cond_wait(&tempAlarm, &mutex);
+            pthread_cond_wait(&waterTempAlarm, &mutex);
         }
-        double currentTemperature = sharedInfo.waterTemp;
-        temperatureInfo = &currentTemperature;
+        memcpy(temperatureInfo, &sharedInfo.waterTemp, sizeof(double));
+    pthread_mutex_unlock(&mutex);
+}
+
+void monitorLevel(double levelLowerBoundV, double levelUpperBoundV, double *levelInfo) {
+    levelLowerBound = levelLowerBoundV;
+    levelUpperBound = levelUpperBoundV;
+
+    pthread_mutex_lock(&mutex);
+        while (sharedInfo.waterLevel > levelLowerBound && sharedInfo.waterLevel < levelUpperBound) {
+            pthread_cond_wait(&waterLevelAlarm, &mutex);
+        }
+        memcpy(levelInfo, &sharedInfo.waterLevel, sizeof(double));
     pthread_mutex_unlock(&mutex);
 }
